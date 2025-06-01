@@ -4,6 +4,9 @@
 
 This Terraform configuration creates a highly available, multi-region API architecture with automatic failover capabilities. Here's how each component works:
 
+## Architecture Diagram
+
+```mermaid
 graph TB
     subgraph "Internet"
         Client[Client Applications]
@@ -111,6 +114,7 @@ graph TB
     class GlobalTable,S3Frontend,LambdaRole,DDBPolicy globalService
     class Client,Browser client
     class Route53,HealthCheck1,HealthCheck2 dns
+```
 
 ## 📍 Traffic Flow
 
