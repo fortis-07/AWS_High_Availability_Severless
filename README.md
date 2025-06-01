@@ -4,6 +4,114 @@
 
 This Terraform configuration creates a highly available, multi-region API architecture with automatic failover capabilities. Here's how each component works:
 
+graph TB
+    subgraph "Internet"
+        Client[Client Applications]
+        Browser[Web Browser]
+    end
+
+    subgraph "DNS & Routing"
+        Route53[Route 53 Hosted Zone<br/>ponmile.com.ng]
+        HealthCheck1[Health Check<br/>Primary Region]
+        HealthCheck2[Health Check<br/>Secondary Region]
+    end
+
+    subgraph "Primary Region (us-east-1)"
+        subgraph "API Gateway Primary"
+            AGW1[API Gateway REST API<br/>REGIONAL Endpoint]
+            Domain1[Custom Domain<br/>api.ponmile.com.ng]
+            Cert1[ACM Certificate<br/>Primary Region]
+        end
+        
+        subgraph "Lambda Functions Primary"
+            ReadLambda1[Read Function<br/>Python 3.9]
+            WriteLambda1[Write Function<br/>Python 3.9]
+        end
+        
+        subgraph "Database Primary"
+            DDB1[DynamoDB Table<br/>PAY_PER_REQUEST<br/>Streams Enabled]
+        end
+    end
+
+    subgraph "Secondary Region (us-west-2)"
+        subgraph "API Gateway Secondary"
+            AGW2[API Gateway REST API<br/>REGIONAL Endpoint]
+            Domain2[Custom Domain<br/>api.ponmile.com.ng]
+            Cert2[ACM Certificate<br/>Secondary Region]
+        end
+        
+        subgraph "Lambda Functions Secondary"
+            ReadLambda2[Read Function<br/>Python 3.9]
+            WriteLambda2[Write Function<br/>Python 3.9]
+        end
+        
+        subgraph "Database Secondary"
+            DDB2[DynamoDB Table<br/>PAY_PER_REQUEST<br/>Streams Enabled]
+        end
+    end
+
+    subgraph "Global Services"
+        GlobalTable[DynamoDB Global Table<br/>Cross-Region Replication]
+        S3Frontend[S3 Static Website<br/>Frontend Hosting]
+    end
+
+    subgraph "IAM & Security"
+        LambdaRole[Lambda Execution Role]
+        DDBPolicy[DynamoDB Access Policy]
+    end
+
+    %% Client connections
+    Client --> Route53
+    Browser --> S3Frontend
+
+    %% DNS routing with health checks
+    Route53 --> |PRIMARY - Healthy| Domain1
+    Route53 --> |SECONDARY - Failover| Domain2
+    HealthCheck1 --> AGW1
+    HealthCheck2 --> AGW2
+
+    %% API Gateway to Lambda connections
+    Domain1 --> AGW1
+    Domain2 --> AGW2
+    AGW1 --> |/read GET| ReadLambda1
+    AGW1 --> |/write POST| WriteLambda1
+    AGW2 --> |/read GET| ReadLambda2
+    AGW2 --> |/write POST| WriteLambda2
+
+    %% Lambda to DynamoDB connections
+    ReadLambda1 --> DDB1
+    WriteLambda1 --> DDB1
+    ReadLambda2 --> DDB2
+    WriteLambda2 --> DDB2
+
+    %% Global table replication
+    DDB1 <--> |Bi-directional<br/>Replication| GlobalTable
+    DDB2 <--> |Bi-directional<br/>Replication| GlobalTable
+
+    %% Certificate dependencies
+    Cert1 --> Domain1
+    Cert2 --> Domain2
+
+    %% IAM connections
+    LambdaRole --> ReadLambda1
+    LambdaRole --> WriteLambda1
+    LambdaRole --> ReadLambda2
+    LambdaRole --> WriteLambda2
+    DDBPolicy --> LambdaRole
+
+    %% Styling
+    classDef primaryRegion fill:#e1f5fe
+    classDef secondaryRegion fill:#f3e5f5
+    classDef globalService fill:#e8f5e8
+    classDef client fill:#fff3e0
+    classDef dns fill:#fce4ec
+
+    class AGW1,Domain1,Cert1,ReadLambda1,WriteLambda1,DDB1 primaryRegion
+    class AGW2,Domain2,Cert2,ReadLambda2,WriteLambda2,DDB2 secondaryRegion
+    class GlobalTable,S3Frontend,LambdaRole,DDBPolicy globalService
+    class Client,Browser client
+    class Route53,HealthCheck1,HealthCheck2 dns
+
 ## 📍 Traffic Flow
 
 ### 1. **Client Request Journey**
